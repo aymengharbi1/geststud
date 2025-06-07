@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GestiClasse - Dashboard Enseignant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/uuid@8.3.2/dist/umd/uuidv4.min.js"></script>
+    <!-- jsPDF and jsPDF-AutoTable for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <!-- Mammoth.js for reading .docx files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+        }
+        .toast {
+            animation: slide-in 0.5s forwards, slide-out 0.5s 2.5s forwards;
+        }
+        @keyframes slide-in {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slide-out {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(100%); opacity: 0; }
+        }
+        #profile-menu {
+            transition: opacity 150ms ease-in-out, transform 150ms ease-in-out;
+        }
+        .status-btn {
+            transition: background-color 0.2s ease-in-out;
+        }
+        .loader {
+            border-top-color: #4f46e5;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .prose textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-height: 80px;
+            resize: vertical;
+        }
+        .prose textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 1px #4f46e5;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50"></div>
+
+    <!-- Login Screen -->
+    <div id="auth-screen" class="flex items-center justify-center h-screen">
+        <div class="w-full max-w-md">
+            <form id="login-form" class="bg-white shadow-lg rounded-lg px-8 pt-6 pb-8 mb-4">
+                 <div class="mb-8 text-center">
+                    <h1 class="text-3xl font-bold text-indigo-600">GestiClasse</h1>
+                    <p class="text-gray-600 mt-2">Connectez-vous à votre espace</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                        Email
+                    </label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="email" type="email" placeholder="prof@email.com">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
+                        Mot de passe
+                    </label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="password" type="password" placeholder="******************">
+                     <p id="login-error" class="text-red-500 text-xs italic hidden">Email ou mot de passe incorrect.</p>
+                </div>
+                <div class="flex items-center justify-between">
+                    <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full" type="submit">
+                        Se connecter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Main App (hidden by default) -->
+    <div id="main-app" class="hidden">
+        <div class="flex h-screen overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="sidebar w-64 bg-white shadow-md flex-shrink-0 flex flex-col">
+                <div>
+                    <div class="p-4 border-b">
+                        <h1 class="text-2xl font-bold text-indigo-600">GestiClasse</h1>
+                    </div>
+                    <!-- Profile Menu Dropdown -->
+                    <div class="p-4 border-b">
+                        <div class="relative">
+                            <button id="profile-menu-button" class="flex items-center w-full p-2 bg-gray-50 rounded-lg text-left hover:bg-gray-200 focus:outline-none">
+                                <svg class="w-10 h-10 rounded-full text-indigo-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clip-rule="evenodd"></path></svg>
+                                <div class="ml-3 flex-grow">
+                                     <p id="teacher-name-display" class="text-sm font-medium text-gray-800 truncate"></p>
+                                     <p class="text-xs text-gray-500">Enseignant</p>
+                                </div>
+                                <svg class="ml-2 w-5 h-5 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="profile-menu" class="absolute z-10 left-0 mt-2 w-full rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden origin-top-left transform opacity-0 scale-95">
+                                <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="profile-menu-button">
+                                    <a href="#" id="menu-profile-link" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Mon Profil</a>
+                                    <a href="#" id="menu-logout-link" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50" role="menuitem">Déconnexion</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Navigation Links -->
+                    <nav class="mt-2">
+                        <a href="#" id="nav-dashboard" class="flex items-center px-4 py-3 text-gray-700">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                            <span class="mx-4">Tableau de bord</span>
+                        </a>
+                        <a href="#" id="nav-students" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-200">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1a6 6 0 00-5.176-5.97m8.352 5.97l.001-.001"></path></svg>
+                            <span class="mx-4">Élèves</span>
+                        </a>
+                        <a href="#" id="nav-classes" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-200">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                            <span class="mx-4">Classes</span>
+                        </a>
+                         <a href="#" id="nav-evaluations" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-200">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                            <span class="mx-4">Évaluations</span>
+                        </a>
+                        <a href="#" id="nav-absences" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-200">
+                           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            <span class="mx-4">Absences</span>
+                        </a>
+                         <a href="#" id="nav-planner" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-200">
+                           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                            <span class="mx-4">Planificateur</span>
+                        </a>
+                    </nav>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+                <div id="app-content" class="container mx-auto px-6 py-8">
+                    <!-- Content will be injected here by JavaScript -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+
+    <!-- Modals -->
+    <div id="modal-placeholder"></div>
+
+    <script>
+    // --- DATABASE & STATE MANAGEMENT ---
+    let db = {
+        teacher: {},
+        students: {},
+        classes: {},
+        assessments: {},
+        grades: {},
+        absences: {},
+        plans: {},
+        currentSchoolYear: '2024-2025'
+    };
+
+    // --- UTILS ---
+    const showToast = (message, type = 'success') => {
+        const toastContainer = document.getElementById('toast-container');
+        const toastId = `toast-${Date.now()}`;
+        const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+        const toastElement = document.createElement('div');
+        toastElement.id = toastId;
+        toastElement.className = `toast ${bgColor} text-white py-2 px-4 rounded-lg shadow-md mb-2`;
+        toastElement.textContent = message;
+        toastContainer.appendChild(toastElement);
+        setTimeout(() => { document.getElementById(toastId)?.remove(); }, 3000);
+    };
+    
+    // --- MODAL FACTORY ---
+    const createModal = (title, content, onSave, onCancel, modalId = 'genericModal') => {
+        const modalHtml = `<div id="${modalId}" class="modal-backdrop fixed inset-0 z-40 flex items-center justify-center opacity-0 pointer-events-none"><div class="modal-content bg-white w-full max-w-lg p-6 rounded-lg shadow-xl transform scale-95"><div class="flex justify-between items-center mb-4"><h3 class="text-xl font-semibold">${title}</h3><button id="close-${modalId}" class="text-gray-500 hover:text-gray-800">&times;</button></div><div>${content}</div><div class="mt-6 flex justify-end space-x-4"><button id="cancel-${modalId}" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annuler</button><button id="save-${modalId}" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Enregistrer</button></div></div></div>`;
+        document.getElementById('modal-placeholder').innerHTML = modalHtml;
+        const modal = document.getElementById(modalId);
+        const openModal = () => { modal.classList.remove('opacity-0', 'pointer-events-none'); modal.querySelector('.modal-content').classList.remove('scale-95'); };
+        const closeModal = () => { modal.classList.add('opacity-0'); modal.querySelector('.modal-content').classList.add('scale-95'); setTimeout(() => { modal.classList.add('pointer-events-none'); document.getElementById('modal-placeholder').innerHTML = ''; }, 300); };
+        document.getElementById(`save-${modalId}`).addEventListener('click', () => { if (onSave()) closeModal(); });
+        document.getElementById(`cancel-${modalId}`).addEventListener('click', closeModal);
+        document.getElementById(`close-${modalId}`).addEventListener('click', closeModal);
+        if(onCancel) onCancel(closeModal);
+        openModal();
+    };
+
+    // --- UI COMPONENTS ---
+    const createSchoolYearSelector = () => {
+        const schoolYears = [...new Set(Object.values(db.classes).map(c => c.schoolYear))].sort().reverse();
+        if (schoolYears.length === 0) schoolYears.push(db.currentSchoolYear);
+        const options = schoolYears.map(year => `<option value="${year}" ${year === db.currentSchoolYear ? 'selected' : ''}>${year}</option>`).join('');
+        return `<div class="mb-6"><label for="school-year-selector" class="block text-sm font-medium text-gray-700">Année Scolaire:</label><select id="school-year-selector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">${options}</select></div>`;
+    };
+
+    const handleSchoolYearChange = (e) => {
+        db.currentSchoolYear = e.target.value;
+        saveState();
+        const currentActive = document.querySelector('nav a.bg-gray-200') || document.getElementById('nav-dashboard');
+        const viewId = currentActive.id.replace('nav-', '');
+        navigateTo(viewId);
+    };
+
+    // --- VIEWS / TEMPLATES ---
+    const renderDashboard = () => {
+        const studentCount = Object.keys(db.students).length, classCount = Object.keys(db.classes).length;
+        const content = `<h2 class="text-3xl font-semibold text-gray-700">Tableau de bord</h2><p class="text-gray-600">Statistiques sur toutes les années.</p><div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"><div class="bg-white p-6 rounded-lg shadow"><div class="flex items-center"><div class="p-3 rounded-full bg-indigo-600 bg-opacity-20"><svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1a6 6 0 00-5.176-5.97m8.352 5.97l.001-.001"></path></svg></div><div class="ml-4"><p class="text-gray-600">Total Élèves</p><p class="text-2xl font-bold">${studentCount}</p></div></div></div><div class="bg-white p-6 rounded-lg shadow"><div class="flex items-center"><div class="p-3 rounded-full bg-green-600 bg-opacity-20"><svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div><div class="ml-4"><p class="text-gray-600">Total Classes</p><p class="text-2xl font-bold">${classCount}</p></div></div></div></div><div class="mt-8 bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-semibold mb-4">Aperçu de l'activité</h3><p class="text-gray-600">Cette section pourra afficher des graphiques sur les moyennes des classes, l'assiduité, etc.</p><canvas id="activityChart"></canvas></div>`;
+        document.getElementById('app-content').innerHTML = content;
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        const existingChart = Chart.getChart(ctx);
+        if (existingChart) existingChart.destroy();
+        new Chart(ctx, { type: 'bar', data: { labels: [...new Set(Object.values(db.classes).map(c => c.schoolYear))].sort(), datasets: [{ label: 'Nombre de classes par an', data: Object.values(db.classes).reduce((acc, c) => { acc[c.schoolYear] = (acc[c.schoolYear] || 0) + 1; return acc; }, {}), backgroundColor: 'rgba(79, 70, 229, 0.6)' }] }, options: { responsive: true, scales: { y: { beginAtZero: true } } } });
+    };
+
+    const renderStudents = () => {
+        const currentYearClassIds = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => c.id);
+        const studentsList = Object.values(db.students).filter(s => currentYearClassIds.includes(s.classId)).map(student => `<tr class="hover:bg-gray-50"><td class="px-6 py-4 whitespace-nowrap"><a href="#" onclick="navigateTo('student-detail', '${student.id}')" class="text-indigo-600 hover:text-indigo-900">${student.firstName} ${student.lastName}</a></td><td class="px-6 py-4 whitespace-nowrap">${student.email}</td><td class="px-6 py-4 whitespace-nowrap">${db.classes[student.classId]?.name || 'N/A'}</td><td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"><button class="text-indigo-600 hover:text-indigo-900" onclick="openEditStudentModal('${student.id}')">Modifier</button><button class="text-red-600 hover:text-red-900 ml-4" onclick="deleteStudent('${student.id}')">Supprimer</button></td></tr>`).join('');
+        const content = `<div class="flex justify-between items-center"><h2 class="text-3xl font-semibold text-gray-700">Gestion des Élèves</h2><button id="add-student-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Ajouter un élève</button></div>${createSchoolYearSelector()}<div class="mt-8 bg-white shadow rounded-lg overflow-hidden"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classe</th><th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${studentsList.length > 0 ? studentsList : `<tr><td colspan="4" class="text-center py-8 text-gray-500">Aucun élève pour l'année ${db.currentSchoolYear}.</td></tr>`}</tbody></table></div>`;
+        document.getElementById('app-content').innerHTML = content;
+        document.getElementById('add-student-btn').addEventListener('click', openAddStudentModal);
+        document.getElementById('school-year-selector').addEventListener('change', handleSchoolYearChange);
+    };
+
+    const renderClasses = () => {
+        const classesList = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(cls => `<div class="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer" onclick="navigateTo('class-detail', '${cls.id}')"><h3 class="text-xl font-bold text-indigo-700">${cls.name}</h3><p class="text-gray-600 mt-2">Niveau: ${cls.level}</p><p class="text-gray-600 mt-1">${Object.values(db.students).filter(s => s.classId === cls.id).length} élève(s)</p></div>`).join('');
+        const content = `<div class="flex justify-between items-center"><h2 class="text-3xl font-semibold text-gray-700">Gestion des Classes</h2><button id="add-class-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Créer une classe</button></div>${createSchoolYearSelector()}<div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${classesList.length > 0 ? classesList : `<p class="col-span-full text-center py-8 text-gray-500">Aucune classe pour l'année ${db.currentSchoolYear}.</p>`}</div>`;
+        document.getElementById('app-content').innerHTML = content;
+        document.getElementById('add-class-btn').addEventListener('click', openAddClassModal);
+        document.getElementById('school-year-selector').addEventListener('change', handleSchoolYearChange);
+    };
+    
+    const renderClassDetail = (classId) => {
+        const cls = db.classes[classId];
+        if (!cls) { navigateTo('classes'); return; }
+        const classStudents = Object.values(db.students).filter(s => s.classId === classId);
+        const classAssessments = Object.values(db.assessments).filter(a => a.classId === classId);
+        const tableHeaders = classAssessments.map(a => `<th class="py-3 px-6 text-left">${a.name}<br><span class="text-xs font-normal text-gray-500">Coeff. ${a.coefficient}</span></th>`).join('');
+        
+        const tableRows = classStudents.map(student => {
+            let totalPoints = 0;
+            let totalCoefficients = 0;
+            const gradeCells = classAssessments.map(assessment => {
+                const gradeObj = Object.values(db.grades).find(g => g.studentId === student.id && g.assessmentId === assessment.id);
+                const grade = gradeObj ? gradeObj.score : null;
+                if (grade !== null && grade >= 0) {
+                    totalPoints += grade * assessment.coefficient;
+                    totalCoefficients += assessment.coefficient;
+                }
+                return `<td class="py-4 px-6"><input type="number" min="0" max="20" step="0.5" value="${grade !== null ? grade : ''}" class="w-20 p-1 border rounded" onchange="updateGrade('${student.id}', '${assessment.id}', this.value)"></td>`;
+            }).join('');
+            const average = totalCoefficients > 0 ? (totalPoints / totalCoefficients) : 'N/A';
+            const averageDisplay = typeof average === 'number' ? average.toFixed(2) : average;
+            return `<tr class="border-b border-gray-200 hover:bg-gray-100"><td class="py-4 px-6 font-medium">${student.firstName} ${student.lastName}</td>${gradeCells}<td class="py-4 px-6 font-bold text-indigo-600">${averageDisplay}</td></tr>`;
+        }).join('');
+
+        const content = `<div class="flex justify-between items-center mb-6"><div><button class="text-indigo-600 hover:underline mb-2" onclick="navigateTo('classes')">&larr; Retour aux classes</button><h2 class="text-3xl font-semibold text-gray-700">${cls.name} - <span class="text-xl">${cls.level} (${cls.schoolYear})</span></h2></div><button onclick="exportClassToPDF('${classId}')" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>Exporter en PDF</button></div><div class="bg-white shadow-md rounded-lg overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50"><tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider"><th class="py-3 px-6">Élève</th>${tableHeaders}<th class="py-3 px-6">Moyenne Générale</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${tableRows.length > 0 ? tableRows : `<tr><td colspan="${classAssessments.length + 2}" class="text-center py-8 text-gray-500">Aucun élève dans cette classe.</td></tr>`}</tbody></table></div>`;
+        document.getElementById('app-content').innerHTML = content;
+    };
+
+    const renderEvaluations = () => {
+        const currentYearClassIds = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => c.id);
+        const evaluationList = Object.values(db.assessments).filter(a => currentYearClassIds.includes(a.classId)).map(evalItem => `<tr class="hover:bg-gray-50"><td class="px-6 py-4 whitespace-nowrap">${evalItem.name}</td><td class="px-6 py-4 whitespace-nowrap">${db.classes[evalItem.classId]?.name || 'N/A'}</td><td class="px-6 py-4 whitespace-nowrap">${evalItem.coefficient}</td><td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"><button class="text-indigo-600 hover:text-indigo-900" onclick="openEditEvaluationModal('${evalItem.id}')">Modifier</button><button class="text-red-600 hover:text-red-900 ml-4" onclick="deleteEvaluation('${evalItem.id}')">Supprimer</button></td></tr>`).join('');
+        const content = `<div class="flex justify-between items-center"><h2 class="text-3xl font-semibold text-gray-700">Gestion des Évaluations</h2><button id="add-evaluation-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Ajouter une évaluation</button></div>${createSchoolYearSelector()}<div class="mt-8 bg-white shadow rounded-lg overflow-hidden"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classe</th><th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coefficient</th><th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${evaluationList.length > 0 ? evaluationList : `<tr><td colspan="4" class="text-center py-8 text-gray-500">Aucune évaluation pour l'année ${db.currentSchoolYear}.</td></tr>`}</tbody></table></div>`;
+        document.getElementById('app-content').innerHTML = content;
+        document.getElementById('add-evaluation-btn').addEventListener('click', openAddEvaluationModal);
+        document.getElementById('school-year-selector').addEventListener('change', handleSchoolYearChange);
+    };
+    
+    const renderAbsences = () => {
+        let selectedClassId = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear)[0]?.id;
+        const today = new Date().toISOString().split('T')[0];
+
+        const renderStudentListForAbsence = (classId, date) => {
+            const classStudents = Object.values(db.students).filter(s => s.classId === classId);
+            const studentListHtml = classStudents.map(student => {
+                const absenceKey = `${student.id}_${date}`;
+                const absenceRecord = db.absences[absenceKey];
+                const status = absenceRecord ? absenceRecord.status : 'present';
+
+                return `<li class="flex items-center justify-between p-4 border-b"><span>${student.firstName} ${student.lastName}</span><div class="flex space-x-2"><button onclick="setAbsenceStatus('${student.id}', '${date}', 'present', '${classId}')" class="status-btn px-3 py-1 text-sm rounded-full ${status === 'present' ? 'bg-green-500 text-white' : 'bg-gray-200'}">Présent(e)</button><button onclick="setAbsenceStatus('${student.id}', '${date}', 'absent', '${classId}')" class="status-btn px-3 py-1 text-sm rounded-full ${status === 'absent' ? 'bg-red-500 text-white' : 'bg-gray-200'}">Absent(e)</button><button onclick="setAbsenceStatus('${student.id}', '${date}', 'late', '${classId}')" class="status-btn px-3 py-1 text-sm rounded-full ${status === 'late' ? 'bg-yellow-500 text-white' : 'bg-gray-200'}">En retard</button></div></li>`;
+            }).join('');
+            document.getElementById('absence-student-list').innerHTML = `<ul>${studentListHtml.length > 0 ? studentListHtml : '<p class="text-center p-4">Aucun élève dans cette classe.</p>'}</ul>`;
+        };
+        
+        const availableClasses = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}" ${c.id === selectedClassId ? 'selected' : ''}>${c.name}</option>`).join('');
+        
+        const content = `<h2 class="text-3xl font-semibold text-gray-700">Gestion des Absences</h2><div class="mt-8 p-6 bg-white rounded-lg shadow"><div class="md:flex md:items-center md:space-x-4"><div class="flex-1"><label for="absence-class-selector" class="block text-sm font-medium text-gray-700">Classe</label><select id="absence-class-selector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">${availableClasses}</select></div><div class="flex-1 mt-4 md:mt-0"><label for="absence-date-picker" class="block text-sm font-medium text-gray-700">Date</label><input type="date" id="absence-date-picker" value="${today}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3"></div></div></div><div id="absence-student-list" class="mt-8 bg-white rounded-lg shadow overflow-hidden"></div>`;
+        document.getElementById('app-content').innerHTML = content;
+        const classSelector = document.getElementById('absence-class-selector'), datePicker = document.getElementById('absence-date-picker');
+        const updateList = () => { renderStudentListForAbsence(classSelector.value, datePicker.value); };
+        classSelector.addEventListener('change', updateList);
+        datePicker.addEventListener('change', updateList);
+        if (classSelector.value) updateList(); else document.getElementById('absence-student-list').innerHTML = '<p class="text-center p-8 text-gray-500">Veuillez d\'abord créer une classe pour cette année scolaire.</p>';
+    };
+
+    const renderPlanner = () => {
+        const content = `
+            <h2 class="text-3xl font-semibold text-gray-700">Planificateur de Cours IA</h2>
+            <div class="mt-8 p-6 bg-white rounded-lg shadow">
+                <h3 class="text-xl font-semibold mb-4">Générer ou Voir un Plan de Cours</h3>
+                <p class="text-gray-600 mb-4">Sélectionnez une classe pour voir son plan de cours existant. Pour générer un nouveau plan, sélectionnez une classe et importez un document .docx.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="md:col-span-1">
+                        <label for="planner-class-selector" class="block text-sm font-medium text-gray-700">Classe</label>
+                        <select id="planner-class-selector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="">Sélectionnez une classe</option>
+                            ${Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                     <div class="md:col-span-2">
+                         <label for="docx-upload" class="block text-sm font-medium text-gray-700">Importer un nouveau cours (.docx)</label>
+                         <input type="file" id="docx-upload" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    </div>
+                </div>
+                <div class="mt-4">
+                     <button id="generate-plan-btn" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                        Générer / Mettre à jour le Plan
+                    </button>
+                </div>
+                <div id="planner-loader" class="hidden mt-6 text-center">
+                    <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto"></div>
+                    <p class="mt-2 text-gray-600">Analyse du document et génération du plan de cours...</p>
+                </div>
+            </div>
+            <div id="planner-output" class="mt-8"></div>
+        `;
+        document.getElementById('app-content').innerHTML = content;
+        document.getElementById('generate-plan-btn').addEventListener('click', handleCourseUpload);
+        document.getElementById('planner-class-selector').addEventListener('change', (e) => {
+            const classId = e.target.value;
+            const plannerOutput = document.getElementById('planner-output');
+            if (db.plans[classId]) {
+                renderLessonPlan(db.plans[classId], classId);
+            } else {
+                plannerOutput.innerHTML = '';
+            }
+        });
+    };
+    
+    const renderProfile = () => {
+        const content = `<h2 class="text-3xl font-semibold text-gray-700">Profil de l'enseignant</h2><div class="mt-8 grid grid-cols-1 gap-8"><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-semibold mb-4">Informations personnelles</h3><div class="space-y-4"><div><label for="teacherName" class="block text-sm font-medium text-gray-700">Nom complet</label><input type="text" id="teacherName" value="${db.teacher.name}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div><div><label for="teacherEmail" class="block text-sm font-medium text-gray-700">Adresse e-mail</label><input type="email" id="teacherEmail" value="${db.teacher.email}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div></div></div><div class="bg-white p-6 rounded-lg shadow"><h3 class="text-xl font-semibold mb-4">Changer le mot de passe</h3><div class="space-y-4"><div><label for="currentPassword" class="block text-sm font-medium text-gray-700">Mot de passe actuel</label><input type="password" id="currentPassword" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div><div><label for="newPassword" class="block text-sm font-medium text-gray-700">Nouveau mot de passe</label><input type="password" id="newPassword" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div><div><label for="confirmNewPassword" class="block text-sm font-medium text-gray-700">Confirmer le nouveau mot de passe</label><input type="password" id="confirmNewPassword" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div></div></div></div><div class="mt-6 flex justify-end"><button id="save-profile-btn" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Enregistrer les modifications</button></div>`;
+        document.getElementById('app-content').innerHTML = content;
+        document.getElementById('save-profile-btn').addEventListener('click', handleProfileUpdate);
+    };
+
+    const renderStudentDetail = (studentId) => {
+        const student = db.students[studentId];
+        if (!student) {
+            navigateTo('students');
+            return;
+        }
+
+        const studentClass = db.classes[student.classId];
+        const studentGrades = Object.values(db.grades).filter(g => g.studentId === studentId && db.assessments[g.assessmentId]?.classId === student.classId);
+        const studentAbsences = Object.values(db.absences).filter(a => a.studentId === studentId).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const gradesHtml = studentGrades.length > 0 ? studentGrades.map(grade => {
+            const assessment = db.assessments[grade.assessmentId];
+            return `<tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${assessment.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${grade.score} / 20</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${assessment.coefficient}</td>
+                    </tr>`;
+        }).join('') : `<tr><td colspan="3" class="text-center py-4 text-gray-500">Aucune note pour cette année scolaire.</td></tr>`;
+
+        const absencesHtml = studentAbsences.length > 0 ? studentAbsences.map(absence => `
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(absence.date).toLocaleDateString('fr-FR')}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${absence.status === 'absent' ? 'Absent(e)' : 'En retard'}</td>
+            </tr>
+        `).join('') : `<tr><td colspan="2" class="text-center py-4 text-gray-500">Aucune absence enregistrée.</td></tr>`;
+
+        const content = `
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <button class="text-indigo-600 hover:underline mb-2" onclick="navigateTo('students')">&larr; Retour aux élèves</button>
+                    <h2 class="text-3xl font-semibold text-gray-700">${student.firstName} ${student.lastName}</h2>
+                </div>
+                <button onclick="exportStudentToPDF('${studentId}')" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Exporter le Bilan
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1 bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-xl font-semibold mb-4 border-b pb-2">Informations Personnelles</h3>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>Nom :</strong> ${student.lastName}</p>
+                        <p><strong>Prénom :</strong> ${student.firstName}</p>
+                        <p><strong>Date de Naissance :</strong> ${new Date(student.birthDate).toLocaleDateString('fr-FR')}</p>
+                        <p><strong>Email :</strong> ${student.email}</p>
+                        <p><strong>Classe :</strong> ${studentClass?.name || 'N/A'}</p>
+                    </div>
+                     <h3 class="text-xl font-semibold mb-4 mt-6 border-b pb-2">Coordonnées du Tuteur</h3>
+                     <div class="space-y-2 text-sm">
+                        <p><strong>Nom :</strong> <input id="parentNameInput" class="border-b w-full" value="${student.parentName || ''}"></p>
+                        <p><strong>Email :</strong> <input id="parentEmailInput" class="border-b w-full" value="${student.parentEmail || ''}"></p>
+                        <p><strong>Téléphone :</strong> <input id="parentPhoneInput" class="border-b w-full" value="${student.parentPhone || ''}"></p>
+                    </div>
+                    <button onclick="saveParentInfo('${studentId}')" class="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Enregistrer Tuteur</button>
+                </div>
+
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white rounded-lg shadow overflow-hidden">
+                         <h3 class="text-xl font-semibold p-4">Relevé de notes (${db.currentSchoolYear})</h3>
+                         <table class="min-w-full"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Évaluation</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Note</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Coeff.</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${gradesHtml}</tbody></table>
+                    </div>
+                    <div class="bg-white rounded-lg shadow overflow-hidden">
+                         <h3 class="text-xl font-semibold p-4">Historique des Absences</h3>
+                         <table class="min-w-full"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${absencesHtml}</tbody></table>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('app-content').innerHTML = content;
+    };
+
+    // --- LOGIC & ACTIONS ---
+    const openAddStudentModal = () => {
+        const availableClasses = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        const formContent = `
+            <div class="space-y-4">
+                <input type="text" id="studentFirstName" placeholder="Prénom" class="w-full p-2 border rounded">
+                <input type="text" id="studentLastName" placeholder="Nom" class="w-full p-2 border rounded">
+                <input type="email" id="studentEmail" placeholder="Email" class="w-full p-2 border rounded">
+                <input type="date" id="studentBirthDate" class="w-full p-2 border rounded">
+                <label for="studentClassId" class="block text-sm font-medium text-gray-700">Classe (Année: ${db.currentSchoolYear})</label>
+                <select id="studentClassId" class="w-full p-2 border rounded"><option value="">Aucune classe</option>${availableClasses}</select>
+                <h4 class="font-semibold pt-4 border-t">Informations du Tuteur</h4>
+                <input type="text" id="studentParentName" placeholder="Nom du Tuteur" class="w-full p-2 border rounded">
+                <input type="email" id="studentParentEmail" placeholder="Email du Tuteur" class="w-full p-2 border rounded">
+                <input type="tel" id="studentParentPhone" placeholder="Téléphone du Tuteur" class="w-full p-2 border rounded">
+            </div>`;
+        createModal('Ajouter un nouvel élève', formContent, () => {
+            const newStudent = { id: uuidv4(), firstName: document.getElementById('studentFirstName').value, lastName: document.getElementById('studentLastName').value, email: document.getElementById('studentEmail').value, birthDate: document.getElementById('studentBirthDate').value, classId: document.getElementById('studentClassId').value, parentName: document.getElementById('studentParentName').value, parentEmail: document.getElementById('studentParentEmail').value, parentPhone: document.getElementById('studentParentPhone').value };
+            if (!newStudent.firstName || !newStudent.lastName) { showToast('Le prénom et le nom sont requis.', 'error'); return false; }
+            db.students[newStudent.id] = newStudent;
+            saveState(); renderStudents(); showToast('Élève ajouté avec succès!'); return true;
+        });
+    };
+    
+    const openEditStudentModal = (studentId) => {
+        const student = db.students[studentId];
+        const availableClasses = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}" ${student.classId === c.id ? 'selected' : ''}>${c.name}</option>`).join('');
+        const formContent = `
+            <div class="space-y-4">
+                <input type="text" id="studentFirstName" value="${student.firstName}" class="w-full p-2 border rounded">
+                <input type="text" id="studentLastName" value="${student.lastName}" class="w-full p-2 border rounded">
+                <input type="email" id="studentEmail" value="${student.email}" class="w-full p-2 border rounded">
+                <input type="date" id="studentBirthDate" value="${student.birthDate}" class="w-full p-2 border rounded">
+                <label for="studentClassId" class="block text-sm font-medium text-gray-700">Classe (Année: ${db.currentSchoolYear})</label>
+                <select id="studentClassId" class="w-full p-2 border rounded"><option value="">Aucune classe</option>${availableClasses}</select>
+                <h4 class="font-semibold pt-4 border-t">Informations du Tuteur</h4>
+                <input type="text" id="studentParentName" value="${student.parentName || ''}" placeholder="Nom du Tuteur" class="w-full p-2 border rounded">
+                <input type="email" id="studentParentEmail" value="${student.parentEmail || ''}" placeholder="Email du Tuteur" class="w-full p-2 border rounded">
+                <input type="tel" id="studentParentPhone" value="${student.parentPhone || ''}" placeholder="Téléphone du Tuteur" class="w-full p-2 border rounded">
+            </div>`;
+        createModal('Modifier l\'élève', formContent, () => {
+            const updatedStudent = { ...student, firstName: document.getElementById('studentFirstName').value, lastName: document.getElementById('studentLastName').value, email: document.getElementById('studentEmail').value, birthDate: document.getElementById('studentBirthDate').value, classId: document.getElementById('studentClassId').value, parentName: document.getElementById('studentParentName').value, parentEmail: document.getElementById('studentParentEmail').value, parentPhone: document.getElementById('studentParentPhone').value };
+            if (!updatedStudent.firstName || !updatedStudent.lastName) { showToast('Le prénom et le nom sont requis.', 'error'); return false; }
+            db.students[student.id] = updatedStudent;
+            saveState(); renderStudents(); showToast('Informations de l\'élève mises à jour!'); return true;
+        });
+    };
+    
+    const deleteStudent = (studentId) => {
+        const modalContent = `<p>Êtes-vous sûr de vouloir supprimer cet élève ? Cette action est irréversible.</p>`;
+        createModal('Confirmer la suppression', modalContent, () => {
+            delete db.students[studentId];
+            Object.keys(db.grades).forEach(gradeId => { if (db.grades[gradeId].studentId === studentId) delete db.grades[gradeId]; });
+            Object.keys(db.absences).forEach(absenceKey => { if (absenceKey.startsWith(studentId)) delete db.absences[absenceKey]; });
+            saveState(); renderStudents(); showToast('Élève supprimé.'); return true;
+        }, () => {}, 'confirmDeleteModal');
+    };
+    
+    const openAddClassModal = () => {
+        const formContent = `<div class="space-y-4"><input type="text" id="className" placeholder="Nom de la classe (ex: Seconde G1)" class="w-full p-2 border rounded"><input type="text" id="classLevel" placeholder="Niveau (ex: Lycée)" class="w-full p-2 border rounded"><div><label for="classSchoolYear" class="block text-sm font-medium text-gray-700">Année Scolaire</label><input type="text" id="classSchoolYear" value="${db.currentSchoolYear}" placeholder="ex: 2024-2025" class="w-full p-2 border rounded"></div></div>`;
+        createModal('Créer une nouvelle classe', formContent, () => {
+            const newClass = { id: uuidv4(), name: document.getElementById('className').value, level: document.getElementById('classLevel').value, schoolYear: document.getElementById('classSchoolYear').value };
+            if (!newClass.name || !newClass.schoolYear) { showToast('Le nom et l\'année scolaire sont requis.', 'error'); return false; }
+            db.classes[newClass.id] = newClass;
+            saveState(); renderClasses(); showToast('Classe créée avec succès!'); return true;
+        });
+    };
+
+    const openAddEvaluationModal = () => {
+        const availableClasses = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        const formContent = `<div class="space-y-4"><input type="text" id="assessmentName" placeholder="Nom (ex: Devoir Surveillé 1)" class="w-full p-2 border rounded"><input type="number" id="assessmentCoefficient" min="0" step="0.5" placeholder="Coefficient (ex: 1, 2, 0.5)" class="w-full p-2 border rounded"><label for="assessmentClassId" class="block text-sm font-medium text-gray-700">Classe (Année: ${db.currentSchoolYear})</label><select id="assessmentClassId" class="w-full p-2 border rounded">${availableClasses}</select></div>`;
+        createModal('Ajouter une évaluation', formContent, () => {
+            const newAssessment = { id: uuidv4(), name: document.getElementById('assessmentName').value, coefficient: parseFloat(document.getElementById('assessmentCoefficient').value), classId: document.getElementById('assessmentClassId').value };
+            if (!newAssessment.name || isNaN(newAssessment.coefficient) || !newAssessment.classId) { showToast('Tous les champs sont requis.', 'error'); return false; }
+            db.assessments[newAssessment.id] = newAssessment;
+            saveState(); renderEvaluations(); showToast('Évaluation ajoutée!'); return true;
+        });
+    };
+
+    const openEditEvaluationModal = (assessmentId) => {
+        const assessment = db.assessments[assessmentId];
+        const availableClasses = Object.values(db.classes).filter(c => c.schoolYear === db.currentSchoolYear).map(c => `<option value="${c.id}" ${assessment.classId === c.id ? 'selected' : ''}>${c.name}</option>`).join('');
+        const formContent = `<div class="space-y-4"><input type="text" id="assessmentName" value="${assessment.name}" class="w-full p-2 border rounded"><input type="number" id="assessmentCoefficient" value="${assessment.coefficient}" min="0" step="0.5" class="w-full p-2 border rounded"><label for="assessmentClassId" class="block text-sm font-medium text-gray-700">Classe (Année: ${db.currentSchoolYear})</label><select id="assessmentClassId" class="w-full p-2 border rounded">${availableClasses}</select></div>`;
+        createModal('Modifier l\'évaluation', formContent, () => {
+            const updatedAssessment = { ...assessment, name: document.getElementById('assessmentName').value, coefficient: parseFloat(document.getElementById('assessmentCoefficient').value), classId: document.getElementById('assessmentClassId').value };
+            if (!updatedAssessment.name || isNaN(updatedAssessment.coefficient) || !updatedAssessment.classId) { showToast('Tous les champs sont requis.', 'error'); return false; }
+            db.assessments[assessmentId] = updatedAssessment;
+            saveState(); renderEvaluations(); showToast('Évaluation mise à jour!'); return true;
+        });
+    };
+
+    const deleteEvaluation = (assessmentId) => {
+        const modalContent = `<p>Êtes-vous sûr de vouloir supprimer cette évaluation ? Toutes les notes associées seront également effacées.</p>`;
+        createModal('Confirmer la suppression', modalContent, () => {
+            delete db.assessments[assessmentId];
+            Object.keys(db.grades).forEach(gradeId => { if (db.grades[gradeId].assessmentId === assessmentId) delete db.grades[gradeId]; });
+            saveState(); renderEvaluations(); showToast('Évaluation supprimée.'); return true;
+        }, () => {}, 'confirmDeleteModal');
+    };
+
+    const updateGrade = (studentId, assessmentId, score) => {
+        const scoreValue = score === '' ? null : parseFloat(score);
+        if (scoreValue !== null && (isNaN(scoreValue) || scoreValue < 0 || scoreValue > 20)) { showToast('La note doit être entre 0 et 20.', 'error'); renderClassDetail(db.assessments[assessmentId].classId); return; }
+        let grade = Object.values(db.grades).find(g => g.studentId === studentId && g.assessmentId === assessmentId);
+        if (grade) { if (scoreValue === null) delete db.grades[grade.id]; else grade.score = scoreValue; }
+        else if (scoreValue !== null) { grade = {id: uuidv4(), studentId, assessmentId, score: scoreValue}; db.grades[grade.id] = grade; }
+        saveState(); renderClassDetail(db.assessments[assessmentId].classId); showToast('Note enregistrée.', 'success');
+    };
+    
+    const setAbsenceStatus = (studentId, date, status, classId) => {
+        const absenceKey = `${studentId}_${date}`;
+        if (status === 'present') {
+            delete db.absences[absenceKey];
+        } else {
+            db.absences[absenceKey] = {
+                studentId,
+                date,
+                status
+            };
+        }
+        saveState();
+        document.getElementById('absence-date-picker').dispatchEvent(new Event('change'));
+    };
+
+    const handleProfileUpdate = () => {
+        const teacherName = document.getElementById('teacherName').value, teacherEmail = document.getElementById('teacherEmail').value, currentPassword = document.getElementById('currentPassword').value, newPassword = document.getElementById('newPassword').value, confirmNewPassword = document.getElementById('confirmNewPassword').value;
+        db.teacher.name = teacherName; db.teacher.email = teacherEmail;
+        document.getElementById('teacher-name-display').textContent = db.teacher.name;
+        if (currentPassword || newPassword || confirmNewPassword) {
+            if (currentPassword !== db.teacher.password) { showToast('Le mot de passe actuel est incorrect.', 'error'); return; }
+            if (newPassword.length < 6) { showToast('Le nouveau mot de passe doit contenir au moins 6 caractères.', 'error'); return; }
+            if (newPassword !== confirmNewPassword) { showToast('Les nouveaux mots de passe ne correspondent pas.', 'error'); return; }
+            db.teacher.password = newPassword;
+        }
+        saveState(); showToast('Profil mis à jour avec succès!');
+        document.getElementById('currentPassword').value = ''; document.getElementById('newPassword').value = ''; document.getElementById('confirmNewPassword').value = '';
+    };
+
+    const navigateTo = (view, param = null) => {
+        document.querySelectorAll('nav a').forEach(link => { link.classList.remove('bg-gray-200'); link.classList.add('hover:bg-gray-200'); });
+        const activeLink = document.getElementById(`nav-${view.split('-')[0]}`);
+        if(activeLink) { activeLink.classList.add('bg-gray-200'); activeLink.classList.remove('hover:bg-gray-200'); }
+        else { document.querySelectorAll('nav a').forEach(link => link.classList.remove('bg-gray-200')); }
+        switch (view) {
+            case 'dashboard': renderDashboard(); break;
+            case 'students': renderStudents(); break;
+            case 'classes': renderClasses(); break;
+            case 'evaluations': renderEvaluations(); break;
+            case 'absences': renderAbsences(); break;
+            case 'planner': renderPlanner(); break;
+            case 'profile': renderProfile(); break;
+            case 'student-detail': renderStudentDetail(param); break;
+            case 'class-detail': renderClassDetail(param); break;
+            default: renderDashboard();
+        }
+    };
+    
+    // --- PDF EXPORT ---
+    const exportClassToPDF = (classId) => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const cls = db.classes[classId];
+        const classStudents = Object.values(db.students).filter(s => s.classId === classId);
+        const classAssessments = Object.values(db.assessments).filter(a => a.classId === classId);
+
+        doc.setFontSize(18);
+        doc.text(`Relevé de Notes - ${cls.name}`, 14, 22);
+        doc.setFontSize(12);
+        doc.text(`Année Scolaire: ${cls.schoolYear}`, 14, 30);
+        doc.text(`Enseignant: ${db.teacher.name}`, 14, 36);
+
+        const tableColumn = ["Élève", ...classAssessments.map(a => `${a.name} (Coeff. ${a.coefficient})`), "Moyenne"];
+        const tableRows = [];
+
+        classStudents.forEach(student => {
+            let totalPoints = 0;
+            let totalCoefficients = 0;
+            const studentRow = [`${student.firstName} ${student.lastName}`];
+            
+            classAssessments.forEach(assessment => {
+                const gradeObj = Object.values(db.grades).find(g => g.studentId === student.id && g.assessmentId === assessment.id);
+                const grade = gradeObj ? gradeObj.score : null;
+                studentRow.push(grade !== null ? grade.toFixed(2) : '-');
+                if (grade !== null && grade >= 0) {
+                    totalPoints += grade * assessment.coefficient;
+                    totalCoefficients += assessment.coefficient;
+                }
+            });
+            
+            const average = totalCoefficients > 0 ? (totalPoints / totalCoefficients) : 'N/A';
+            studentRow.push(typeof average === 'number' ? average.toFixed(2) : average);
+            tableRows.push(studentRow);
+        });
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 45,
+            theme: 'grid',
+            headStyles: { fillColor: [79, 70, 229] }
+        });
+        
+        doc.save(`Releve_Notes_${cls.name.replace(/ /g, '_')}.pdf`);
+        showToast('PDF généré avec succès !');
+    };
+    
+    // --- AI PLANNER ---
+    const handleCourseUpload = async () => {
+        const classId = document.getElementById('planner-class-selector').value;
+        const fileInput = document.getElementById('docx-upload');
+        const file = fileInput.files[0];
+
+        if (!classId) {
+            showToast('Veuillez sélectionner une classe.', 'error');
+            return;
+        }
+        if (!file) {
+            showToast('Veuillez sélectionner un fichier .docx.', 'error');
+            return;
+        }
+
+        const loader = document.getElementById('planner-loader');
+        const outputContainer = document.getElementById('planner-output');
+        loader.classList.remove('hidden');
+        outputContainer.innerHTML = '';
+
+        try {
+            const fileReader = new FileReader();
+            fileReader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    const docxText = result.value;
+
+                    const prompt = `Agis en tant qu'ingénieur pédagogique expert. Analyse le texte du cours suivant : "${docxText.substring(0, 15000)}". Découpe-le en séances logiques de 2 heures. Pour chaque séance, fournis une réponse structurée en JSON contenant : 'titre_seance', 'domaine_apprentissage', 'objectif_specifique', 'competences' (un tableau de chaînes), 'contenu_cours' (un paragraphe détaillé), et 'exercices' (un tableau de chaînes).`;
+                    
+                    let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = {
+                        contents: chatHistory,
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        "titre_seance": { "type": "STRING" },
+                                        "domaine_apprentissage": { "type": "STRING" },
+                                        "objectif_specifique": { "type": "STRING" },
+                                        "competences": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                        "contenu_cours": { "type": "STRING" },
+                                        "exercices": { "type": "ARRAY", "items": { "type": "STRING" } }
+                                    },
+                                    required: ["titre_seance", "domaine_apprentissage", "objectif_specifique", "competences", "contenu_cours", "exercices"]
+                                }
+                            }
+                        }
+                    };
+                    const apiKey = ""; 
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+                    if (!response.ok) throw new Error(`Erreur de l'API: ${response.statusText}`);
+
+                    const resultJson = await response.json();
+                    
+                    if (resultJson.candidates && resultJson.candidates[0].content && resultJson.candidates[0].content.parts.length > 0) {
+                        const lessonPlan = JSON.parse(resultJson.candidates[0].content.parts[0].text);
+                        db.plans[classId] = lessonPlan;
+                        saveState();
+                        renderLessonPlan(lessonPlan, classId);
+                    } else {
+                        throw new Error("La réponse de l'API est malformée.");
+                    }
+                } catch (error) {
+                    console.error('Error processing DOCX:', error);
+                    showToast("Une erreur est survenue lors de la lecture du document.", 'error');
+                } finally {
+                    loader.classList.add('hidden');
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        } catch (error) {
+            console.error('Error setting up file reader:', error);
+            showToast("Une erreur est survenue lors du chargement du fichier.", 'error');
+            loader.classList.add('hidden');
+        }
+    };
+    
+    const renderLessonPlan = (plan, classId) => {
+        const outputContainer = document.getElementById('planner-output');
+        const planHtml = plan.map((session, index) => `
+            <div class="bg-white rounded-lg shadow mb-4" id="session-${classId}-${index}">
+                <button class="w-full text-left p-4 flex justify-between items-center accordion-toggle">
+                    <h4 class="text-lg font-semibold text-indigo-700">Séance ${index + 1}: <span class="font-bold">${session.titre_seance}</span></h4>
+                    <svg class="w-6 h-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div class="accordion-content px-6 pb-6 border-t border-gray-200">
+                    <div class="prose max-w-none space-y-4 pt-4">
+                        <div><h5 class="font-semibold text-gray-800">Domaine d'Apprentissage</h5><textarea id="domaine-${classId}-${index}" class="mt-1">${session.domaine_apprentissage}</textarea></div>
+                        <div><h5 class="font-semibold text-gray-800">Compétences à Développer</h5><textarea id="competences-${classId}-${index}" class="mt-1">${Array.isArray(session.competences) ? session.competences.join('\n') : ''}</textarea></div>
+                        <div><h5 class="font-semibold text-gray-800">Objectif Spécifique</h5><textarea id="objectif-${classId}-${index}" class="mt-1">${session.objectif_specifique}</textarea></div>
+                        <div><h5 class="font-semibold text-gray-800">Contenu du Cours</h5><textarea id="contenu-${classId}-${index}" class="mt-1 h-40">${session.contenu_cours}</textarea></div>
+                        <div><h5 class="font-semibold text-gray-800">Exercices</h5><textarea id="exercices-${classId}-${index}" class="mt-1">${Array.isArray(session.exercices) ? session.exercices.join('\n') : ''}</textarea></div>
+                        <div class="flex justify-end space-x-4 pt-4">
+                           <button onclick="saveSessionChanges('${classId}', ${index})" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Sauvegarder</button>
+                           <button onclick="exportSessionToPDF('${classId}', ${index})" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Télécharger PDF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        outputContainer.innerHTML = planHtml;
+
+        document.querySelectorAll('.accordion-toggle').forEach(button => {
+            button.addEventListener('click', () => {
+                const content = button.nextElementSibling;
+                const icon = button.querySelector('svg');
+                if (content.style.maxHeight) {
+                    content.style.maxHeight = null;
+                    icon.classList.remove('rotate-180');
+                } else {
+                    content.style.maxHeight = content.scrollHeight + "px";
+                    icon.classList.add('rotate-180');
+                }
+            });
+        });
+    };
+
+    const saveSessionChanges = (classId, sessionIndex) => {
+        if (!db.plans[classId] || !db.plans[classId][sessionIndex]) return;
+        const session = db.plans[classId][sessionIndex];
+        session.domaine_apprentissage = document.getElementById(`domaine-${classId}-${sessionIndex}`).value;
+        session.objectif_specifique = document.getElementById(`objectif-${classId}-${sessionIndex}`).value;
+        session.competences = document.getElementById(`competences-${classId}-${sessionIndex}`).value.split('\n').filter(s => s);
+        session.contenu_cours = document.getElementById(`contenu-${classId}-${sessionIndex}`).value;
+        session.exercices = document.getElementById(`exercices-${classId}-${sessionIndex}`).value.split('\n').filter(s => s);
+        saveState();
+        showToast(`Séance ${sessionIndex + 1} sauvegardée !`);
+    };
+
+    const exportSessionToPDF = (classId, sessionIndex) => {
+        if (!db.plans[classId] || !db.plans[classId][sessionIndex]) return;
+        const session = db.plans[classId][sessionIndex];
+        const cls = db.classes[classId];
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 15;
+        const pageHeight = doc.internal.pageSize.height;
+        const pageWidth = doc.internal.pageSize.width;
+        const margin = 14;
+
+        // Header
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(79, 70, 229); // Indigo
+        doc.text(`Fiche de Préparation - Séance ${sessionIndex + 1}`, pageWidth / 2, y, { align: 'center' });
+        y += 10;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(14);
+        doc.setTextColor(55, 65, 81); // Gray-700
+        doc.text(session.titre_seance, pageWidth / 2, y, { align: 'center' });
+        y += 15;
+
+        const addSection = (title, content, isList = false) => {
+            const textLines = doc.splitTextToSize(isList ? content.map(c => `- ${c}`).join('\n') : content, pageWidth - margin * 2);
+            const textHeight = textLines.length * 5 + 15; // Approximate height with title
+            if (y + textHeight > pageHeight - 20) { // Check for page break
+                doc.addPage();
+                y = margin;
+            }
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(79, 70, 229);
+            doc.text(title, margin, y);
+            y += 7;
+            doc.setDrawColor(229, 231, 235); // Gray-200 line
+            doc.line(margin, y - 2, pageWidth - margin, y - 2);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(17, 24, 39);
+            const textToSplit = isList ? content.map(c => `- ${c}`).join('\n') : content;
+            const splitContent = doc.splitTextToSize(textToSplit, pageWidth - margin * 2);
+            doc.text(splitContent, margin, y);
+            y += (splitContent.length * 5) + 10;
+        };
+
+        addSection("Domaine d'Apprentissage", session.domaine_apprentissage);
+        addSection("Objectif Spécifique", session.objectif_specifique);
+        addSection("Compétences à Développer", session.competences, true);
+        addSection("Contenu du Cours", session.contenu_cours);
+        addSection("Exercices", session.exercices, true);
+
+        // Footer
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(9);
+            doc.setTextColor(156, 163, 175);
+            const footerText = `${db.teacher.name} | Année Scolaire: ${cls.schoolYear} | Page ${i} / ${pageCount}`;
+            doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        }
+        
+        doc.save(`Fiche_Seance_${sessionIndex + 1}_${session.titre_seance.replace(/[\/\?<>\\:\*\|"]/g, '_')}.pdf`);
+    };
+
+
+    // --- APP LIFECYCLE ---
+    const saveState = () => { localStorage.setItem('gestiClasseDb', JSON.stringify(db)); };
+
+    const loadState = () => {
+        const savedDb = localStorage.getItem('gestiClasseDb');
+        if (savedDb) {
+            db = JSON.parse(savedDb);
+            if (!db.teacher) db.teacher = { name: 'Professeur', email: 'prof@email.com', password: 'password' };
+            if(!db.absences) db.absences = {};
+            if(!db.plans) db.plans = {};
+            // Data migration for old classes/assessments
+            Object.values(db.classes).forEach(cls => { if (!cls.schoolYear) cls.schoolYear = '2024-2025'; });
+            Object.values(db.assessments).forEach(a => { if(a.weight !== undefined && a.coefficient === undefined) { a.coefficient = a.weight; delete a.weight; } });
+            
+            const schoolYears = [...new Set(Object.values(db.classes).map(c => c.schoolYear))];
+            if (!db.currentSchoolYear || !schoolYears.includes(db.currentSchoolYear)) {
+                db.currentSchoolYear = schoolYears.sort().reverse()[0] || '2024-2025';
+            }
+        } else {
+            db = { teacher: { name: 'Professeur Test', email: 'prof@email.com', password: 'password' }, students: {}, classes: {}, assessments: {}, grades: {}, absences: {}, plans: {}, currentSchoolYear: '2024-2025' };
+            const class1Id = uuidv4(), student1Id = uuidv4();
+            db.classes[class1Id] = { id: class1Id, name: 'Seconde G1', level: 'Lycée', schoolYear: '2024-2025' };
+            db.students[student1Id] = { id: student1Id, firstName: 'Jean', lastName: 'Dupont', email: 'jean.dupont@email.com', birthDate: '2008-05-10', classId: class1Id };
+        }
+        saveState();
+    };
+
+    const initApp = () => {
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        document.getElementById('teacher-name-display').textContent = db.teacher.name;
+        // Navigation
+        document.getElementById('nav-dashboard').addEventListener('click', (e) => { e.preventDefault(); navigateTo('dashboard'); });
+        document.getElementById('nav-students').addEventListener('click', (e) => { e.preventDefault(); navigateTo('students'); });
+        document.getElementById('nav-classes').addEventListener('click', (e) => { e.preventDefault(); navigateTo('classes'); });
+        document.getElementById('nav-evaluations').addEventListener('click', (e) => { e.preventDefault(); navigateTo('evaluations'); });
+        document.getElementById('nav-absences').addEventListener('click', (e) => { e.preventDefault(); navigateTo('absences'); });
+        document.getElementById('nav-planner').addEventListener('click', (e) => { e.preventDefault(); navigateTo('planner'); });
+        // Profile Menu
+        const profileMenuButton = document.getElementById('profile-menu-button'), profileMenu = document.getElementById('profile-menu');
+        document.getElementById('menu-profile-link').addEventListener('click', (e) => { e.preventDefault(); navigateTo('profile'); profileMenu.classList.add('hidden', 'opacity-0', 'scale-95'); });
+        document.getElementById('menu-logout-link').addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
+        profileMenuButton.addEventListener('click', (e) => { e.stopPropagation(); const isHidden = profileMenu.classList.contains('hidden'); if (isHidden) { profileMenu.classList.remove('hidden'); setTimeout(() => profileMenu.classList.remove('opacity-0', 'scale-95'), 10); } else { profileMenu.classList.add('opacity-0', 'scale-95'); setTimeout(() => profileMenu.classList.add('hidden'), 150); } });
+        window.addEventListener('click', () => { if (!profileMenu.classList.contains('hidden')) { profileMenu.classList.add('opacity-0', 'scale-95'); setTimeout(() => profileMenu.classList.add('hidden'), 150); } });
+        navigateTo('dashboard');
+    };
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value, password = document.getElementById('password').value, errorMsg = document.getElementById('login-error');
+        if (email === db.teacher.email && password === db.teacher.password) { sessionStorage.setItem('isAuthenticated', 'true'); errorMsg.classList.add('hidden'); initApp(); }
+        else { errorMsg.classList.remove('hidden'); }
+    };
+    
+    const handleLogout = () => {
+        sessionStorage.removeItem('isAuthenticated');
+        document.getElementById('main-app').classList.add('hidden');
+        document.getElementById('auth-screen').classList.remove('hidden');
+        document.getElementById('password').value = '';
+        document.getElementById('email').value = db.teacher.email;
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadState();
+        document.getElementById('login-form').addEventListener('submit', handleLogin);
+        document.getElementById('email').value = db.teacher.email;
+        if (sessionStorage.getItem('isAuthenticated') === 'true') {
+            initApp();
+        }
+    });
+    </script>
+</body>
+</html>
