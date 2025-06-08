@@ -1553,8 +1553,18 @@
                   },
                 },
               };
-              const apiKey = "";
-              const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const apiKey = "";
+                if (!apiKey) {
+                  showToast(
+                    "Cl\xC3\xA9 API manquante pour le planificateur.",
+                    "error"
+                  );
+                  loader.classList.add("hidden");
+                  return;
+                }
+                const apiUrl =
+                  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
+                  apiKey;
               const response = await fetch(apiUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
