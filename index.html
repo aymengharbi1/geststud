@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Élèves</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4 text-indigo-700">Gestion des Élèves</h1>
+        <form id="student-form" class="bg-white p-4 rounded shadow mb-6">
+            <div class="mb-2">
+                <label class="block text-sm" for="prenom">Prénom</label>
+                <input class="w-full border rounded p-2" type="text" id="prenom" required>
+            </div>
+            <div class="mb-2">
+                <label class="block text-sm" for="nom">Nom</label>
+                <input class="w-full border rounded p-2" type="text" id="nom" required>
+            </div>
+            <div class="mb-2">
+                <label class="block text-sm" for="classe">Classe</label>
+                <input class="w-full border rounded p-2" type="text" id="classe">
+            </div>
+            <div class="mb-2">
+                <label class="block text-sm" for="age">Âge</label>
+                <input class="w-full border rounded p-2" type="number" id="age" min="3">
+            </div>
+            <button class="mt-2 px-4 py-2 bg-indigo-600 text-white rounded" type="submit">Ajouter</button>
+        </form>
+        <h2 class="text-xl font-semibold mb-2">Liste des élèves</h2>
+        <table class="w-full bg-white rounded shadow" id="students-table">
+            <thead class="bg-indigo-50">
+                <tr>
+                    <th class="p-2 text-left">ID</th>
+                    <th class="p-2 text-left">Prénom</th>
+                    <th class="p-2 text-left">Nom</th>
+                    <th class="p-2 text-left">Classe</th>
+                    <th class="p-2 text-left">Âge</th>
+                    <th class="p-2"></th>
+                </tr>
+            </thead>
+            <tbody id="students-body"></tbody>
+        </table>
+    </div>
+
+<script>
+async function fetchStudents() {
+    const res = await fetch('/students');
+    const students = await res.json();
+    const tbody = document.getElementById('students-body');
+    tbody.innerHTML = '';
+    students.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="p-2">${s.id}</td>
+                        <td class="p-2">${s.prenom}</td>
+                        <td class="p-2">${s.nom}</td>
+                        <td class="p-2">${s.classe || ''}</td>
+                        <td class="p-2">${s.age || ''}</td>
+                        <td class="p-2 text-right"><button class="text-red-600" onclick="deleteStudent(${s.id})">Supprimer</button></td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+async function deleteStudent(id) {
+    await fetch('/students/' + id, { method: 'DELETE' });
+    fetchStudents();
+}
+
+document.getElementById('student-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        prenom: document.getElementById('prenom').value,
+        nom: document.getElementById('nom').value,
+        classe: document.getElementById('classe').value,
+        age: parseInt(document.getElementById('age').value) || null
+    };
+    await fetch('/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    e.target.reset();
+    fetchStudents();
+});
+
+fetchStudents();
+</script>
+</body>
+</html>
